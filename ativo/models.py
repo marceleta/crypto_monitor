@@ -5,6 +5,7 @@ from usuario.models import Usuario
 class Ativo(models.Model):
     moeda = models.ForeignKey(Moeda, on_delete=models.CASCADE)  # Relaciona o ativo à moeda cadastrada
     data_compra = models.DateField()
+    quantidade = models.DecimalField(max_digits=20, decimal_places=10, default=0)  # Quantidade comprada do ativo
     valor_compra = models.DecimalField(max_digits=12, decimal_places=2)
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)  # Relaciona o ativo ao usuário que comprou
 

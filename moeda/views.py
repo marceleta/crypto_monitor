@@ -1,7 +1,11 @@
 from rest_framework import viewsets
-from moeda.models import Moeda
-from moeda.serializers import MoedaSerializer
+from ativo.models import Ativo
+from moeda.models import Moeda, HistoricoCotacao
+from moeda.serializers import MoedaSerializer, HistoricoCotacaoSerializer
 from rest_framework.permissions import IsAuthenticated  # Certifique-se de que a autenticação é obrigatória
+from rest_framework.response import Response
+from rest_framework.decorators import action
+from collections import defaultdict
 
 class MoedaViewSet(viewsets.ModelViewSet):
     queryset = Moeda.objects.all()
@@ -12,5 +16,8 @@ class MoedaViewSet(viewsets.ModelViewSet):
         # Associa a moeda ao usuário autenticado
         #print("request.user: "+str(self.request.user))
         serializer.save(usuario=self.request.user)
+
+
+
 
 

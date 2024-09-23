@@ -1,5 +1,6 @@
 from django.db import models
 from usuario.models import Usuario
+from django.utils import timezone
 
 class Moeda(models.Model):
     nome = models.CharField(max_length=100)
@@ -14,7 +15,7 @@ class Moeda(models.Model):
 
 class HistoricoCotacao(models.Model):
     moeda = models.ForeignKey(Moeda, on_delete=models.CASCADE)  # Relaciona com a moeda
-    data = models.DateField(auto_now_add=True)  # Data da cotação (adiciona automaticamente a data do dia)
+    data = models.DateField(null=True)  # Data da cotação (adiciona automaticamente a data do dia)
     preco = models.DecimalField(max_digits=20, decimal_places=10)  # Preço da moeda no dia
 
     class Meta:

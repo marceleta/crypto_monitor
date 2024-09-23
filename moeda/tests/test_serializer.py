@@ -1,6 +1,7 @@
+from decimal import Decimal
 from django.test import TestCase
-from moeda.models import Moeda
-from moeda.serializers import MoedaSerializer
+from moeda.models import Moeda, HistoricoCotacao
+from moeda.serializers import MoedaSerializer, HistoricoCotacaoSerializer
 from usuario.models import Usuario  # Importa o modelo de usuário
 
 class MoedaSerializerTest(TestCase):
@@ -108,4 +109,3 @@ class MoedaSerializerTest(TestCase):
         moeda_id = self.moeda.id
         self.moeda.delete()
         self.assertFalse(Moeda.objects.filter(id=moeda_id).exists())  # Verifica se a moeda foi deletada
-

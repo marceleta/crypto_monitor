@@ -24,7 +24,8 @@ class AtivoSerializerTest(TestCase):
             moeda=self.moeda,
             data_compra="2024-09-12",
             valor_compra=10000.00,
-            usuario=self.usuario
+            usuario=self.usuario,
+            quantidade=0.5,
         )
 
         # Dados para criação de um novo ativo

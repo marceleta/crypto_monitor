@@ -2,10 +2,10 @@ from rest_framework import serializers
 from .models import Moeda, HistoricoCotacao
 
 class MoedaSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Moeda
-        fields = ['id', 'nome', 'token', 'cor', 'logo', 'usuario']
-        read_only_fields = ['usuario']
+        fields = ['id', 'nome', 'token', 'cor', 'logo', 'usuario', 'corretora']
 
 class HistoricoCotacaoSerializer(serializers.ModelSerializer):
     

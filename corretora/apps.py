@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class MoedaConfig(AppConfig):
+class CorretoraConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'moeda'
+    name = 'corretora'

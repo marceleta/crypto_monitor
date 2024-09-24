@@ -44,7 +44,8 @@ INSTALLED_APPS = [
     'moeda',
     'usuario',
     'ativo',
-    'patrimonio'
+    'patrimonio',
+    'corretora'
 ]
 
 REST_FRAMEWORK = {

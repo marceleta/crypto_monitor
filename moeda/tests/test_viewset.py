@@ -32,7 +32,7 @@ class MoedaViewSetTests(APITestCase):
             'token': 'ETH',
             'cor': '#3C3C3D',
             'logo': None,
-            #'usuario':self.usuario.id
+            'usuario':self.usuario.id
         }
         response = self.client.post(self.list_url, data, format='json')
         #print(response.data)
@@ -65,9 +65,11 @@ class MoedaViewSetTests(APITestCase):
             'nome': 'Bitcoin Atualizado',
             'token': 'BTC',
             'cor': '#F7931A',
-            'logo': None
+            'logo': None,
+            'usuario': self.usuario.id
         }
         response = self.client.put(moeda_url, data, format='json')
+        #print('response.data: '+str(response.data))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.moeda.refresh_from_db()
         self.assertEqual(self.moeda.nome, 'Bitcoin Atualizado')

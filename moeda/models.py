@@ -1,6 +1,7 @@
 from django.db import models
 from usuario.models import Usuario
-from django.utils import timezone
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 
 class Moeda(models.Model):
     nome = models.CharField(max_length=100)
@@ -8,6 +9,11 @@ class Moeda(models.Model):
     cor = models.CharField(max_length=7, default='#FF5733')
     logo = models.ImageField(upload_to='logos_moedas/', blank=True, null=True)
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)  # Relaciona com o usuário personalizado
+    
+    # Campos para a relação genérica
+    corretora_content_type = models.ForeignKey(ContentType, on_delete=models.SET_NULL, null=True, blank=True)
+    corretora_object_id = models.PositiveIntegerField(null=True, blank=True)
+    corretora = GenericForeignKey('corretora_content_type', 'corretora_object_id')
 
     def __str__(self):
         return self.nome

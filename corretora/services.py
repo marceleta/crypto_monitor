@@ -1,80 +1,102 @@
-import requests
 from abc import ABC, abstractmethod
+import requests
+import time
+import hmac
+import hashlib
+
 
 class CorretoraService(ABC):
-    
-    @abstractmethod
-    def get_precos(self, symbol):
-        """
-        Retorna os preços atuais de um ativo (ex: BTC/USDT).
-        """
-        pass
 
-    @abstractmethod
-    def get_saldo(self):
-        """
-        Retorna o saldo disponível na corretora para cada moeda.
-        """
-        pass
-
-    @abstractmethod
-    def get_historico_transacoes(self):
-        """
-        Retorna o histórico de transações de compra e venda.
-        """
-        pass
-
-
-class BybitService(CorretoraService):
-    
     def __init__(self, corretora):
-        """
-        A corretora é uma instância de BybitCorretora que contém as chaves da API.
-        """
-        self.api_key = corretora.api_key
-        self.api_secret = corretora.api_secret
-        self.base_url = 'https://api.bybit.com'
-    
-    def get_precos(self, symbol):
+        self.corretora = corretora
+
+    @abstractmethod
+    def buscar_preco_ativo(self, ativo):
+        pass
+
+    @abstractmethod
+    def testar_conexao(self):
+        pass
+
+    def _fazer_requisicao(self, endpoint, params=None, method='GET', data=None):
         try:
-            response = requests.get(f'{self.base_url}/v2/public/tickers?symbol={symbol}')
-            response.raise_for_status()  # Levanta uma exceção para códigos de erro HTTP
-            data = response.json()
-            return data['result'][0]['last_price']
-        except requests.RequestException as e:
-            # Tratar erro de conexão ou erro HTTP
-            #print(f"Erro ao buscar preço: {e}")
+            url = f"{self.corretora.url_base}/{endpoint}"
+            headers, params = self.autenticar(endpoint, method, params)
+            if method == 'POST':
+                response = requests.post(url, headers=headers, params=params, json=data)
+            else:
+                response = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            response.raise_for_status()  # Levanta exceção para erros de status HTTP
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Erro na requisição: {e}")
             return None
 
 
-    def get_saldo(self):
-        url = f'{self.base_url}/v2/private/wallet/balance'
-        params = {'api_key': self.api_key}
-        return self._get(url, params=params)
 
-    def get_historico_transacoes(self):
-        url = f'{self.base_url}/v2/private/execution/list'
-        params = {'api_key': self.api_key}
-        return self._get(url, params=params)
+    @abstractmethod
+    def autenticar(self, endpoint, method, params=None):
+        pass
     
-    def _get(self, url, params=None):
+
+class BybitService(CorretoraService):
+    
+    def buscar_preco_ativo(self, ativo, data, intervalo='1D'):
+        # Endpoint para candles históricos
+        endpoint = "v2/public/kline/list"
+        
+        # Converter a data desejada para timestamp (em segundos)
+        timestamp = int(time.mktime(time.strptime(data, '%Y-%m-%d'))) * 1000  # Milissegundos
+
+        
+        # Parâmetros da requisição
+        params = {
+            'symbol': ativo,  # Ex: BTCUSD
+            'interval': intervalo,  # Ex: 1, 3, 5, 15, 30, 60 (minutos), D (diário)
+            'from': timestamp  # Timestamp de início
+        }
+
+        # Fazer a requisição para o endpoint de velas
+        resposta = self._fazer_requisicao(endpoint, params)
+        
+        # Verificar se há dados retornados e pegar o primeiro candle da resposta
+        if 'result' in resposta and len(resposta['result']) > 0:
+            candle = resposta['result'][0]  # Candle mais próximo da data
+            return {
+                'abertura': candle['open'],
+                'fechamento': candle['close'],
+                'alta': candle['high'],
+                'baixa': candle['low'],
+                'volume': candle['volume'],
+                'data': data
+            }
+        else:
+            print(f"Erro: Nenhum dado de candle retornado para o ativo {ativo} na data {data}")
+            return None
+
+    def autenticar(self, endpoint, method, params=None):
+        timestamp = str(int(time.time() * 1000))
+        params['api_key'] = self.corretora.api_key
+        params['timestamp'] = timestamp
+        query_string = '&'.join([f"{key}={params[key]}" for key in sorted(params)])
+        signature = hmac.new(self.corretora.api_secret.encode(), query_string.encode(), hashlib.sha256).hexdigest()
+        params['sign'] = signature
+        return {}, params # Retorna headers vazios, pois Bybit utiliza params
+    
+
+    def testar_conexao(self):
         """
-        Método privado que encapsula a lógica de fazer uma requisição GET
-        e de tratar erros básicos.
+        Método para testar a conexão com a API da Bybit.
+        Faz uma requisição simples a um endpoint público para verificar a disponibilidade da API.
         """
-        try:
-            response = requests.get(url, params=params)
-            response.raise_for_status()  # Lança um erro para status HTTP 4xx/5xx
-            data = response.json()
-            return data['result']
-        except requests.exceptions.HTTPError as e:
-            # Trate erros HTTP aqui
-            print(f"Erro HTTP: {e}")
-        except requests.exceptions.RequestException as e:
-            # Trate outros erros (ex. de conexão)
-            print(f"Erro de conexão: {e}")
-        except KeyError:
-            # Tratar erros de formato inesperado na resposta
-            print("Erro: resposta inesperada da API.")
+        endpoint = "v2/public/time"  # Um endpoint simples que retorna o tempo do servidor
+        resposta = self._fazer_requisicao(endpoint)
+        if resposta and 'time_now' in resposta:
+            print("Conexão com a Bybit bem-sucedida.")
+            return True
+        else:
+            print("Falha na conexão com a Bybit.")
+            return False
 
 

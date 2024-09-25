@@ -31,7 +31,8 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('', include('moeda.urls')),
     path('', include('ativo.urls')),
-    path('', include('patrimonio.urls'))
+    path('', include('patrimonio.urls')),
+    path('', include('corretora.urls'))
 ]
 
 if settings.DEBUG:

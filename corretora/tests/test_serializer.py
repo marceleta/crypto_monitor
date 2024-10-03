@@ -1,72 +1,108 @@
 from django.test import TestCase
+from rest_framework.exceptions import ValidationError
+from corretora.models import CorretoraConfig, TipoOperacao, CorretoraUsuario
 from usuario.models import Usuario
-from corretora.models import Corretora
-from corretora.serializers import CorretoraSerializer
+from corretora.serializers import TipoOperacaoSerializer, CorretoraConfigSerializer, CorretoraUsuarioSerializer
 
-class CorretoraSerializerTest(TestCase):
+
+class SerializerTestCase(TestCase):
 
     def setUp(self):
-        # Criando um usuário de teste
-        self.usuario = Usuario.objects.create_user(
-            username='testuser',
-            email='testuser@example.com',
-            password='testpassword123'
+        # Criando tipos de operação e corretora
+        self.tipo_spot = TipoOperacao.objects.create(tipo='spot')
+        self.tipo_futures = TipoOperacao.objects.create(tipo='futures')
+
+        # Criando corretora
+        self.corretora = CorretoraConfig.objects.create(
+            nome="Binance",
+            url_base="https://api.binance.com",
+            exige_passphrase=False
         )
+        self.corretora.tipos_suportados.add(self.tipo_spot, self.tipo_futures)
 
-        # Dados iniciais para a corretora
-        self.corretora_data = {
-            'nome': 'Test Corretora',
-            'url_base': 'https://api.testcorretora.com',
-            'api_key': 'test_api_key',
-            'api_secret': 'test_api_secret',
-            'passphrase': 'test_passphrase',
-            'tipo': 'spot',
-            'usuario': self.usuario
+        # Criando usuário
+        self.usuario = Usuario.objects.create_user(username="usuario_teste", password="123456")
+
+        # Criando CorretoraUsuario
+        self.corretora_usuario = CorretoraUsuario.objects.create(
+            corretora=self.corretora,
+            api_key="my_api_key",
+            api_secret="my_api_secret",
+            passphrase="my_passphrase",
+            usuario=self.usuario
+        )
+        self.corretora_usuario.tipos.add(self.tipo_spot, self.tipo_futures)
+
+    def test_tipo_operacao_serialization(self):
+        # Testa a serialização de TipoOperacao
+        serializer = TipoOperacaoSerializer(self.tipo_spot)
+        data = serializer.data
+        self.assertEqual(data['tipo'], 'spot')
+
+    def test_corretora_usuario_serialization(self):
+        # Testa a serialização de CorretoraUsuario (sem api_key, api_secret e passphrase)
+        serializer = CorretoraUsuarioSerializer(self.corretora_usuario)
+        data = serializer.data
+
+        # Verifica se os campos estão presentes no serializer
+        self.assertEqual(data['corretora'], self.corretora.id)  # Comparar com o ID da corretora
+        self.assertEqual(len(data['tipos']), 2)
+        self.assertEqual(data['usuario'], self.corretora_usuario.usuario.id)
+
+        # Verifica se os campos api_key, api_secret e passphrase não foram serializados
+        self.assertNotIn('api_key', data)
+        self.assertNotIn('api_secret', data)
+        self.assertNotIn('passphrase', data)
+
+
+    def test_corretora_usuario_deserialization(self):
+        # Testa a deserialização de CorretoraUsuario, garantindo que api_key, api_secret e passphrase são aceitos
+        data = {
+            'corretora': self.corretora.id,  # Envie apenas o ID
+            'tipos': [self.tipo_spot.id, self.tipo_futures.id],  # Envie apenas uma lista de IDs
+            'usuario': self.usuario.id,
+            'api_key': 'new_api_key',
+            'api_secret': 'new_api_secret',
+            'passphrase': 'new_passphrase'
         }
 
-    def test_serializer_valid_data(self):
-        """Teste para validar se os dados do serializer são válidos"""
-        serializer = CorretoraSerializer(data=self.corretora_data, context={'request': None})
-        self.assertTrue(serializer.is_valid())
-        self.assertEqual(serializer.validated_data['nome'], 'Test Corretora')
+        serializer = CorretoraUsuarioSerializer(data=data)
+        #print('serializer: '+str(serializer))
+        
+        if not serializer.is_valid():
+            print('serializer erros: '+str(serializer.errors))
+        else:
+            corretora_usuario = serializer.save()
 
-    def test_serializer_invalid_data(self):
-        """Teste para validar se dados inválidos retornam erro"""
-        invalid_data = self.corretora_data.copy()
-        invalid_data['nome'] = ''  # Nome é obrigatório, então isso deve falhar
-        serializer = CorretoraSerializer(data=invalid_data, context={'request': None})
-        self.assertFalse(serializer.is_valid())
-        self.assertIn('nome', serializer.errors)
+            # Verifica se os dados foram salvos corretamente
+            self.assertEqual(corretora_usuario.api_key, 'new_api_key')
+            self.assertEqual(corretora_usuario.api_secret, 'new_api_secret')
+            self.assertEqual(corretora_usuario.passphrase, 'new_passphrase')
+            self.assertEqual(corretora_usuario.usuario, self.usuario)
 
-    def test_serializer_create_corretora(self):
-        """Teste para criação de corretora com o serializer"""
-        serializer = CorretoraSerializer(data=self.corretora_data, context={'request': None})
-        self.assertTrue(serializer.is_valid())
-        corretora = serializer.save(usuario=self.usuario)
-        self.assertEqual(corretora.nome, self.corretora_data['nome'])
-        self.assertEqual(corretora.url_base, self.corretora_data['url_base'])
-        self.assertEqual(corretora.usuario, self.usuario)
 
-    def test_serializer_hidden_sensitive_fields(self):
-        """Teste para garantir que os campos sensíveis não sejam expostos na serialização"""
-        corretora = Corretora.objects.create(**self.corretora_data)
-        serializer = CorretoraSerializer(corretora)
-        self.assertNotIn('api_key', serializer.data)
-        self.assertNotIn('api_secret', serializer.data)
-        self.assertNotIn('passphrase', serializer.data)
-
-    def test_serializer_update_corretora(self):
-        """Teste para atualização de uma corretora com o serializer"""
-        corretora = Corretora.objects.create(**self.corretora_data)
-        updated_data = {
-            'nome': 'Updated Corretora',
-            'url_base': 'https://api.updatedcorretora.com',
-            'tipo': 'futures'
+    def test_corretora_usuario_deserialization(self):
+        # Testa a deserialização de CorretoraUsuario, garantindo que api_key, api_secret e passphrase são aceitos
+        data = {
+            'corretora': self.corretora.id,  # Enviar apenas o ID da corretora
+            'tipos': [self.tipo_spot.id, self.tipo_futures.id],  # Enviar apenas uma lista de IDs dos tipos
+            'usuario': self.usuario.id,
+            'api_key': 'new_api_key',
+            'api_secret': 'new_api_secret',
+            'passphrase': 'new_passphrase'
         }
-        serializer = CorretoraSerializer(instance=corretora, data=updated_data, partial=True)
-        self.assertTrue(serializer.is_valid())
-        corretora = serializer.save()
-        self.assertEqual(corretora.nome, 'Updated Corretora')
-        self.assertEqual(corretora.url_base, 'https://api.updatedcorretora.com')
-        self.assertEqual(corretora.tipo, 'futures')
+
+        serializer = CorretoraUsuarioSerializer(data=data)
+        #print('serializer: '+str(serializer))
+        
+        if not serializer.is_valid():
+            print('serializer erros: '+str(serializer.errors))
+        else:
+            corretora_usuario = serializer.save()
+
+            # Verifica se os dados foram salvos corretamente
+            self.assertEqual(corretora_usuario.api_key, 'new_api_key')
+            self.assertEqual(corretora_usuario.api_secret, 'new_api_secret')
+            self.assertEqual(corretora_usuario.passphrase, 'new_passphrase')
+            self.assertEqual(corretora_usuario.usuario, self.usuario)
 

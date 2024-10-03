@@ -10,23 +10,24 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('moeda', '0001_initial'),
+        ('corretora', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='moeda',
+            model_name='corretorausuario',
             name='usuario',
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
         ),
         migrations.AddField(
-            model_name='historicocotacao',
-            name='moeda',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='moeda.moeda'),
+            model_name='corretorausuario',
+            name='tipos',
+            field=models.ManyToManyField(to='corretora.tipooperacao'),
         ),
-        migrations.AlterUniqueTogether(
-            name='historicocotacao',
-            unique_together={('moeda', 'data')},
+        migrations.AddField(
+            model_name='corretoraconfig',
+            name='tipos_suportados',
+            field=models.ManyToManyField(blank=True, to='corretora.tipooperacao'),
         ),
     ]

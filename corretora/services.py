@@ -7,8 +7,8 @@ import hashlib
 
 class CorretoraService(ABC):
 
-    def __init__(self, corretora):
-        self.corretora = corretora
+    def __init__(self, corretoraUsuario):
+        self.corretoraUsuario = corretoraUsuario
 
     @abstractmethod
     def buscar_preco_ativo(self, ativo):
@@ -20,7 +20,7 @@ class CorretoraService(ABC):
 
     def _fazer_requisicao(self, endpoint, params=None, method='GET', data=None):
         try:
-            url = f"{self.corretora.url_base}/{endpoint}"
+            url = f"{self.corretoraUsuario.corretora.url_base}/{endpoint}"
             headers, params = self.autenticar(endpoint, method, params)
             if method == 'POST':
                 response = requests.post(url, headers=headers, params=params, json=data)
@@ -76,13 +76,23 @@ class BybitService(CorretoraService):
             return None
 
     def autenticar(self, endpoint, method, params=None):
+
+        if params is None:
+            params = {}
+
         timestamp = str(int(time.time() * 1000))
-        params['api_key'] = self.corretora.api_key
+        params['api_key'] = self.corretoraUsuario.api_key
         params['timestamp'] = timestamp
+        
+        if self.corretoraUsuario.corretora.exige_passphrase and self.corretoraUsuario.passphrase:
+            params['passphrase'] = self.corretoraUsuario.passphrase
+        
         query_string = '&'.join([f"{key}={params[key]}" for key in sorted(params)])
-        signature = hmac.new(self.corretora.api_secret.encode(), query_string.encode(), hashlib.sha256).hexdigest()
+        signature = hmac.new(self.corretoraUsuario.api_secret.encode(), query_string.encode(), hashlib.sha256).hexdigest()
         params['sign'] = signature
-        return {}, params # Retorna headers vazios, pois Bybit utiliza params
+        
+        return {}, params
+
     
 
     def testar_conexao(self):

@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from .models import Moeda, HistoricoCotacao
+from corretora.models import CorretoraUsuario
 
 class MoedaSerializer(serializers.ModelSerializer):
+    corretora = serializers.PrimaryKeyRelatedField(queryset=CorretoraUsuario.objects.all(), allow_null=True)
 
     class Meta:
         model = Moeda

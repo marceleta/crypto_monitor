@@ -21,12 +21,17 @@ class Moeda(models.Model):
 
 class HistoricoCotacao(models.Model):
     moeda = models.ForeignKey(Moeda, on_delete=models.CASCADE)  # Relaciona com a moeda
-    data = models.DateField(null=True)  # Data da cotação (adiciona automaticamente a data do dia)
-    preco = models.DecimalField(max_digits=20, decimal_places=10)  # Preço da moeda no dia
+    data = models.DateField(null=True)  # Data da cotação
+    abertura = models.DecimalField(max_digits=20, decimal_places=10, default=0)  # Preço de abertura no dia
+    fechamento = models.DecimalField(max_digits=20, decimal_places=10, default=0)  # Preço de fechamento no dia
+    alta = models.DecimalField(max_digits=20, decimal_places=10, default=0)  # Preço mais alto no dia
+    baixa = models.DecimalField(max_digits=20, decimal_places=10, default=0)  # Preço mais baixo no dia
+    volume = models.DecimalField(max_digits=20, decimal_places=10, default=0)  # Volume negociado no dia
 
     class Meta:
         unique_together = ('moeda', 'data')  # Garante que só haverá uma cotação por moeda por dia
 
     def __str__(self):
-        return f'{self.moeda.nome} - {self.data} - {self.preco}'
+        return f'{self.moeda.nome} - {self.data} - Abertura: {self.abertura} - Fechamento: {self.fechamento}'
+
 

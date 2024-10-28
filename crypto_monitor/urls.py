@@ -32,7 +32,8 @@ urlpatterns = [
     path('', include('moeda.urls')),
     path('', include('ativo.urls')),
     path('', include('patrimonio.urls')),
-    path('', include('corretora.urls'))
+    path('', include('corretora.urls')),
+    path('', include('usuario.urls'))
 ]
 
 if settings.DEBUG:

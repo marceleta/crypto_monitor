@@ -9,15 +9,21 @@ class TipoOperacaoSerializer(serializers.ModelSerializer):
 
 
 class CorretoraConfigSerializer(serializers.ModelSerializer):
-    tipos_suportados = serializers.PrimaryKeyRelatedField(queryset=TipoOperacao.objects.all(), many=True)
+    tipos_suportados = TipoOperacaoSerializer(many=True, read_only=True)
 
     class Meta:
         model = CorretoraConfig
         fields = ['id', 'nome', 'url_base', 'exige_passphrase', 'tipos_suportados', 'logo']
 
+    def get_logo(self, obj):
+        request = self.context.get('request')
+        if obj.logo:
+            return request.build_absolute_uri(obj.logo.url)
+        return None
+
 
 class CorretoraUsuarioSerializer(serializers.ModelSerializer):
-    # Alteração: Agora usamos PrimaryKeyRelatedField para corretora e tipos
+    
     corretora = serializers.PrimaryKeyRelatedField(queryset=CorretoraConfig.objects.all())
     tipos = serializers.PrimaryKeyRelatedField(many=True, queryset=TipoOperacao.objects.all())
 
@@ -33,6 +39,7 @@ class CorretoraUsuarioSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # Extrai os dados de tipos (usando apenas IDs)
         tipos_data = validated_data.pop('tipos')
+        #print('tipos_data: '+str(tipos_data))
 
         # Cria a instância do CorretoraUsuario com os dados validados
         corretora_usuario = CorretoraUsuario.objects.create(**validated_data)
@@ -55,3 +62,12 @@ class CorretoraUsuarioSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+    
+class CorretoraUsuarioDetailSerializer(serializers.ModelSerializer):
+    # Inclui os detalhes da corretora com todos os campos relevantes
+    corretora = CorretoraConfigSerializer(read_only=True)
+    tipos = TipoOperacaoSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = CorretoraUsuario
+        fields = ['id', 'tipos', 'usuario', 'corretora']

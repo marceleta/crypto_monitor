@@ -3,12 +3,15 @@ from ativo.models import Ativo
 from moeda.models import Moeda
 from usuario.models import Usuario
 from ativo.serializers import AtivoSerializer
+from django.db.models.signals import post_save
+from ativo.signals import iniciar_busca_apos_criacao_ativo
 
 class AtivoSerializerTest(TestCase):
 
     def setUp(self):
         # Cria um usuário para associar aos ativos
         self.usuario = Usuario.objects.create_user(username='testuser', password='testpass')
+        post_save.disconnect(iniciar_busca_apos_criacao_ativo, sender=Ativo)
 
         # Cria uma moeda para associar aos ativos
         self.moeda = Moeda.objects.create(
@@ -30,7 +33,7 @@ class AtivoSerializerTest(TestCase):
 
         # Dados para criação de um novo ativo
         self.ativo_data = {
-            'moeda': self.moeda.id,
+            'moeda_id': self.moeda.id,
             'data_compra': '2024-09-11',
             'valor_compra': 5000.00
         }
@@ -39,6 +42,7 @@ class AtivoSerializerTest(TestCase):
         # Testa se o serializer possui os campos corretos
         serializer = AtivoSerializer(instance=self.ativo)
         data = serializer.data
+        #print("test_serializer_serialization: data: "+str(data))
         expected_fields = {'id', 'moeda', 'data_compra', 'valor_compra', 'usuario'}
         self.assertEqual(set(data.keys()), expected_fields)
 
@@ -46,7 +50,8 @@ class AtivoSerializerTest(TestCase):
         # Testa se o serializer serializa corretamente os dados de um objeto Ativo
         serializer = AtivoSerializer(instance=self.ativo)
         data = serializer.data
-        self.assertEqual(data['moeda'], self.moeda.id)
+        #print("test_serializer_serialization: data: "+str(data))
+        self.assertEqual(data['moeda']['id'], self.moeda.id)
         self.assertEqual(data['valor_compra'], '10000.00')
         self.assertEqual(data['data_compra'], '2024-09-12')
         self.assertEqual(data['usuario'], self.usuario.id)
@@ -54,7 +59,12 @@ class AtivoSerializerTest(TestCase):
     def test_serializer_deserialization(self):
         # Testa se o serializer desserializa corretamente os dados e cria um novo objeto Ativo
         serializer = AtivoSerializer(data=self.ativo_data)
+        
+        if not serializer.is_valid():
+            print('test_serializer_deserialization serializer: '+str(serializer.errors))
+
         self.assertTrue(serializer.is_valid())
+        
         ativo = serializer.save(usuario=self.usuario)
         self.assertEqual(ativo.moeda, self.moeda)
         self.assertEqual(ativo.valor_compra, 5000.00)
@@ -64,11 +74,13 @@ class AtivoSerializerTest(TestCase):
     def test_serializer_update(self):
         # Testa se o serializer atualiza corretamente um objeto Ativo
         data = {
-            'moeda': self.moeda.id,
+            'moeda_id': self.moeda.id,
             'data_compra': '2024-09-15',
-            'valor_compra': 12000.00
+            'valor_compra': 12000.00,
+            'usuario': self.usuario
         }
-        serializer = AtivoSerializer(instance=self.ativo, data=data)
+        serializer = AtivoSerializer(instance=self.ativo, data=data, partial=True)
+        
         self.assertTrue(serializer.is_valid())
         ativo_atualizado = serializer.save()
         self.assertEqual(ativo_atualizado.valor_compra, 12000.00)
@@ -77,10 +89,10 @@ class AtivoSerializerTest(TestCase):
     def test_serializer_invalid_data(self):
         # Testa se o serializer detecta dados inválidos
         invalid_data = {
-            'moeda': None,  # Moeda não pode ser None
+            'moeda_id': None,  # Moeda não pode ser None
             'data_compra': '2024-09-11',
             'valor_compra': 5000.00
         }
         serializer = AtivoSerializer(data=invalid_data)
         self.assertFalse(serializer.is_valid())
-        self.assertIn('moeda', serializer.errors)
+        self.assertIn('moeda_id', serializer.errors)

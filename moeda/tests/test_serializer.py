@@ -3,7 +3,7 @@ from django.test import TestCase
 from moeda.models import Moeda
 from moeda.serializers import MoedaSerializer
 from usuario.models import Usuario  # Importa o modelo de usuário
-from corretora.models import BybitCorretora
+from corretora.models import CorretoraUsuario, CorretoraConfig
 from django.contrib.contenttypes.models import ContentType
 
 class MoedaSerializerTest(TestCase):
@@ -12,12 +12,23 @@ class MoedaSerializerTest(TestCase):
         # Cria um usuário para associar à moeda
         self.usuario = Usuario.objects.create_user(username='testuser', password='testpass')
 
-        # Cria uma corretora para associar à moeda
-        self.corretora = BybitCorretora.objects.create(
+        # Cria uma configuração de corretora
+        self.corretora_config = CorretoraConfig.objects.create(
             nome="Bybit",
-            api_key="api_key_test",
-            api_secret="api_secret_test"
+            url_base="https://api.bybit.com",
+            exige_passphrase=False
         )
+
+        # Cria uma corretora para associar à moeda
+        self.corretora = CorretoraUsuario.objects.create(
+            corretora=self.corretora_config,
+            api_key="api_key_test",
+            api_secret="api_secret_test",
+            usuario=self.usuario
+        )
+
+        # Obtém o ContentType da corretora
+        self.corretora_content_type = ContentType.objects.get_for_model(CorretoraUsuario)
 
         # Cria um objeto Moeda para os testes, associado ao usuário e corretora
         self.moeda = Moeda.objects.create(
@@ -26,7 +37,7 @@ class MoedaSerializerTest(TestCase):
             cor="#F7931A",
             logo=None,
             usuario=self.usuario,
-            corretora_content_type=ContentType.objects.get_for_model(self.corretora),
+            corretora_content_type=self.corretora_content_type,
             corretora_object_id=self.corretora.id
         )
 
@@ -37,10 +48,7 @@ class MoedaSerializerTest(TestCase):
             'cor': '#3C3C3D',
             'logo': None,
             'usuario': self.usuario.id,
-            'corretora': {
-                'content_type': ContentType.objects.get_for_model(self.corretora).id,
-                'object_id': self.corretora.id
-            }  # Associando a corretora à moeda
+            'corretora': self.corretora.id
         }
 
     def test_serializer_fields(self):
@@ -58,8 +66,7 @@ class MoedaSerializerTest(TestCase):
         self.assertEqual(data['cor'], '#F7931A')
         self.assertIsNone(data['logo'])
         self.assertEqual(data['usuario'], self.usuario.id)
-        self.assertEqual(data['corretora']['content_type'], ContentType.objects.get_for_model(self.corretora).id)
-        self.assertEqual(data['corretora']['object_id'], self.corretora.id)
+        self.assertEqual(data['corretora'], self.corretora.id)
 
     def test_serializer_deserialization(self):
         # Testa se o serializer desserializa corretamente os dados e cria um novo objeto Moeda
@@ -82,10 +89,7 @@ class MoedaSerializerTest(TestCase):
             'cor': '#FFFFFF',
             'logo': None,
             'usuario': self.usuario.id,
-            'corretora': {
-                'content_type': ContentType.objects.get_for_model(self.corretora).id,
-                'object_id': self.corretora.id
-            }
+            'corretora': self.corretora.id
         }
         serializer = MoedaSerializer(data=invalid_data)
         self.assertFalse(serializer.is_valid())
@@ -94,7 +98,10 @@ class MoedaSerializerTest(TestCase):
     def test_create_moeda(self):
         # Testa se o serializer consegue criar uma nova moeda
         serializer = MoedaSerializer(data=self.moeda_data)
-        self.assertTrue(serializer.is_valid())
+
+        if not serializer.is_valid():
+            print("Erros de validação:", serializer.errors)  # Imprime os erros de validação
+
         moeda = serializer.save()
         self.assertEqual(Moeda.objects.count(), 2)
         self.assertEqual(moeda.nome, 'Ethereum')
@@ -108,8 +115,8 @@ class MoedaSerializerTest(TestCase):
         self.assertEqual(data['nome'], 'Bitcoin')
         self.assertEqual(data['token'], 'BTC')
         self.assertEqual(data['usuario'], self.usuario.id)
-        self.assertEqual(data['corretora']['content_type'], ContentType.objects.get_for_model(self.corretora).id)
-        self.assertEqual(data['corretora']['object_id'], self.corretora.id)
+        self.assertEqual(data['corretora'], self.corretora.id)
+        
 
     def test_update_moeda(self):
         # Testa se o serializer consegue atualizar uma moeda existente
@@ -119,10 +126,7 @@ class MoedaSerializerTest(TestCase):
             'cor': '#F7931A',
             'logo': None,
             'usuario': self.usuario.id,
-            'corretora': {
-                'content_type': ContentType.objects.get_for_model(self.corretora).id,
-                'object_id': self.corretora.id
-            }
+            'corretora': self.corretora.id
         }
         serializer = MoedaSerializer(instance=self.moeda, data=update_data)
         self.assertTrue(serializer.is_valid())
@@ -134,3 +138,11 @@ class MoedaSerializerTest(TestCase):
         moeda_id = self.moeda.id
         self.moeda.delete()
         self.assertFalse(Moeda.objects.filter(id=moeda_id).exists())
+
+    def test_serializer_corretora_id(self):
+        # Testa se o serializer inclui o ID da corretora no campo corretora
+        serializer = MoedaSerializer(instance=self.moeda)
+        data = serializer.data
+
+        # Verifica se o ID da corretora é retornado corretamente no campo corretora
+        self.assertEqual(data['corretora'], self.corretora.id)

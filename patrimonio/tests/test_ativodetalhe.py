@@ -21,11 +21,44 @@ class AtivoDetalheViewSetTests(TestCase):
         # Criar uma moeda para associar aos históricos
         self.moeda_btc = Moeda.objects.create(nome='Bitcoin', token='BTC', cor='#F7931A', logo=None, usuario=self.usuario)
 
-        # Criar histórico de cotações em meses diferentes
-        HistoricoCotacao.objects.create(moeda=self.moeda_btc, data=date(2024, 1, 5), preco=Decimal('35000.00'))
-        HistoricoCotacao.objects.create(moeda=self.moeda_btc, data=date(2024, 2, 12), preco=Decimal('35500.00'))
-        HistoricoCotacao.objects.create(moeda=self.moeda_btc, data=date(2024, 3, 18), preco=Decimal('36000.00'))
-        HistoricoCotacao.objects.create(moeda=self.moeda_btc, data=date(2024, 4, 25), preco=Decimal('36500.00'))
+        # Criar histórico de cotações em meses diferentes com os novos campos
+        HistoricoCotacao.objects.create(
+            moeda=self.moeda_btc,
+            data=date(2024, 1, 5),
+            abertura=Decimal('34500.00'),
+            fechamento=Decimal('35000.00'),
+            alta=Decimal('35500.00'),
+            baixa=Decimal('34000.00'),
+            volume=Decimal('1500')
+        )
+        HistoricoCotacao.objects.create(
+            moeda=self.moeda_btc,
+            data=date(2024, 2, 12),
+            abertura=Decimal('35000.00'),
+            fechamento=Decimal('35500.00'),
+            alta=Decimal('36000.00'),
+            baixa=Decimal('34500.00'),
+            volume=Decimal('1600')
+        )
+        HistoricoCotacao.objects.create(
+            moeda=self.moeda_btc,
+            data=date(2024, 3, 18),
+            abertura=Decimal('35500.00'),
+            fechamento=Decimal('36000.00'),
+            alta=Decimal('36500.00'),
+            baixa=Decimal('35000.00'),
+            volume=Decimal('1700')
+        )
+        HistoricoCotacao.objects.create(
+            moeda=self.moeda_btc,
+            data=date(2024, 4, 25),
+            abertura=Decimal('36000.00'),
+            fechamento=Decimal('36500.00'),
+            alta=Decimal('37000.00'),
+            baixa=Decimal('35500.00'),
+            volume=Decimal('1800')
+        )
+
 
 
     def test_historico_preco_agrupamento_mensal(self):

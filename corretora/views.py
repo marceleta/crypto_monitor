@@ -1,8 +1,9 @@
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.decorators import action
 from .models import CorretoraConfig, TipoOperacao, CorretoraUsuario
-from .serializers import CorretoraConfigSerializer, TipoOperacaoSerializer, CorretoraUsuarioSerializer
+from .serializers import CorretoraConfigSerializer, TipoOperacaoSerializer, CorretoraUsuarioSerializer, CorretoraUsuarioDetailSerializer
 
 # ViewSet para TipoOperacao
 class TipoOperacaoViewSet(viewsets.ModelViewSet):
@@ -42,7 +43,9 @@ class CorretoraUsuarioViewSet(viewsets.ModelViewSet):
         return CorretoraUsuario.objects.filter(usuario=self.request.user)
 
     def create(self, request, *args, **kwargs):
+        #print('request.data: '+str(request.data))
         serializer = self.get_serializer(data=request.data)
+        
         if serializer.is_valid():
             self.perform_create(serializer)
             headers = self.get_success_headers(serializer.data)
@@ -60,5 +63,32 @@ class CorretoraUsuarioViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
+    
+
+    # Action personalizada para buscar corretoras pelo nome
+    @action(detail=False, methods=['get'], url_path='buscar-por-nome')
+    def buscar_por_nome(self, request):
+        nome = request.query_params.get('nome', None)
+        if nome:
+            corretoras = CorretoraUsuario.objects.filter(usuario=self.request.user, corretora__nome__icontains=nome)
+            serializer = self.get_serializer(corretoras, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response({"detail": "Nome do corretor não fornecido."}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+class CorretoraUsuarioDetailViewSet(viewsets.ModelViewSet):
+    serializer_class = CorretoraUsuarioDetailSerializer  # Usa o serializer detalhado
+
+    # Customiza o queryset para retornar apenas os objetos do usuário autenticado
+    def get_queryset(self):
+        return CorretoraUsuario.objects.filter(usuario=self.request.user).prefetch_related('tipos', 'corretora__tipos_suportados')
+
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Sobrescreve o método retrieve para retornar os detalhes de CorretoraUsuario e CorretoraConfig
+        """
+        instance = self.get_object()  # Obtém a instância pelo ID filtrado pelo usuário
+        serializer = self.get_serializer(instance)  # Serializa com o serializer detalhado
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 

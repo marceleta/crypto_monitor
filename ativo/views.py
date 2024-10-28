@@ -26,6 +26,8 @@ class AtivoViewSet(viewsets.ModelViewSet):
         """
         Sobrescreve a criação para associar automaticamente o usuário autenticado ao Ativo.
         """
+        #print("AtivoViewSet perform_create"+str(serializer))
+        
         serializer.save(usuario=self.request.user)
 
     def create(self, request, *args, **kwargs):

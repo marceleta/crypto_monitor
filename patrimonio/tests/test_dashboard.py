@@ -3,13 +3,19 @@ from rest_framework.test import APIClient
 from rest_framework import status
 from ativo.models import Ativo
 from moeda.models import Moeda, HistoricoCotacao
+from corretora.models import CorretoraConfig, CorretoraUsuario, TipoOperacao
 from usuario.models import Usuario
 from decimal import Decimal
 from datetime import date  # Importante para definir a data de compra
+from ativo.signals import iniciar_busca_apos_criacao_ativo
+from django.db.models.signals import post_save
 
 class DashboardViewSetTests(TestCase):
 
     def setUp(self):
+        # Desconectar o sinal para evitar execução durante os testes
+        post_save.disconnect(iniciar_busca_apos_criacao_ativo, sender=Ativo)
+        
         # Criar o cliente para realizar requisições
         self.client = APIClient()
 
@@ -19,29 +25,84 @@ class DashboardViewSetTests(TestCase):
         # Autenticar o usuário
         self.client.force_authenticate(user=self.usuario)
 
-        # Criar uma moeda para associar aos ativos
-        self.moeda_btc = Moeda.objects.create(nome='Bitcoin', token='BTC', cor='#F7931A', logo=None, usuario=self.usuario)
-        self.moeda_eth = Moeda.objects.create(nome='Ethereum', token='ETH', cor='#3C3C3D', logo=None, usuario=self.usuario)
+        # Criar a configuração da corretora
+        self.corretora_config = CorretoraConfig.objects.create(
+            nome="Bybit",
+            url_base="https://api.bybit.com",
+            exige_passphrase=False
+        )
+
+        # Criar tipos de operação
+        self.tipo_spot = TipoOperacao.objects.create(tipo='spot')
+
+        # Associar os tipos de operação à corretora
+        self.corretora_config.tipos_suportados.add(self.tipo_spot)
+
+        # Criar a associação entre o usuário e a corretora
+        self.corretora_usuario = CorretoraUsuario.objects.create(
+            corretora=self.corretora_config,
+            api_key="test_api_key",
+            api_secret="test_api_secret",
+            passphrase=None,
+            usuario=self.usuario
+        )
+
+        # Associar tipos de operação ao CorretoraUsuario
+        self.corretora_usuario.tipos.add(self.tipo_spot)
+
+        # Criar moedas associadas à corretora
+        self.moeda_btc = Moeda.objects.create(
+            nome='Bitcoin',
+            token='BTC',
+            cor='#F7931A',
+            logo=None,
+            usuario=self.usuario,
+            corretora=self.corretora_usuario
+        )
+        self.moeda_eth = Moeda.objects.create(
+            nome='Ethereum',
+            token='ETH',
+            cor='#3C3C3D',
+            logo=None,
+            usuario=self.usuario,
+            corretora=self.corretora_usuario
+        )
 
         # Criar ativos para o usuário, incluindo 'data_compra'
         Ativo.objects.create(
-            moeda=self.moeda_btc, 
-            quantidade=1.5, 
-            valor_compra=Decimal('30000.00'), 
-            data_compra=date(2024, 1, 1),  # Adicionando data de compra
+            moeda=self.moeda_btc,
+            quantidade=1.5,
+            valor_compra=Decimal('30000.00'),
+            data_compra=date(2024, 1, 1),
             usuario=self.usuario
         )
         Ativo.objects.create(
-            moeda=self.moeda_eth, 
-            quantidade=10, 
-            valor_compra=Decimal('15000.00'), 
-            data_compra=date(2024, 1, 15),  # Adicionando data de compra
+            moeda=self.moeda_eth,
+            quantidade=10,
+            valor_compra=Decimal('15000.00'),
+            data_compra=date(2024, 1, 15),
             usuario=self.usuario
         )
 
-        # Criar histórico de cotações para as moedas
-        HistoricoCotacao.objects.create(moeda=self.moeda_btc, preco=Decimal('35000.00'))
-        HistoricoCotacao.objects.create(moeda=self.moeda_eth, preco=Decimal('1800.00'))
+        # Criar histórico de cotações para as moedas com os novos campos
+        HistoricoCotacao.objects.create(
+            moeda=self.moeda_btc,
+            data=date(2024, 1, 5),
+            abertura=Decimal('34000.00'),
+            fechamento=Decimal('35000.00'),
+            alta=Decimal('35500.00'),
+            baixa=Decimal('33000.00'),
+            volume=Decimal('1500')
+        )
+        HistoricoCotacao.objects.create(
+            moeda=self.moeda_eth,
+            data=date(2024, 1, 20),
+            abertura=Decimal('1700.00'),
+            fechamento=Decimal('1800.00'),
+            alta=Decimal('1850.00'),
+            baixa=Decimal('1650.00'),
+            volume=Decimal('1000')
+        )
 
     def test_grafico_distribuicao_ativos(self):
         # Realizar a requisição GET para o endpoint
@@ -90,7 +151,7 @@ class DashboardViewSetTests(TestCase):
 
         # Realizar a requisição GET para o endpoint
         response = self.client.get('/api/v1/dashboard/grafico_distribuicao_ativos/')
-        print(response.data)
+        #print(response.data)
         # Verificar se o status da resposta é 401 Unauthorized
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 

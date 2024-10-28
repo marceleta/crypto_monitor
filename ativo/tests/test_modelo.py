@@ -2,12 +2,37 @@ from django.test import TestCase
 from ativo.models import Ativo
 from moeda.models import Moeda
 from usuario.models import Usuario
+from corretora.models import CorretoraConfig, CorretoraUsuario, TipoOperacao
+from ativo.signals import iniciar_busca_apos_criacao_ativo
+from django.db.models.signals import post_save
 
 class AtivoModelTests(TestCase):
 
     def setUp(self):
+
+        post_save.disconnect(iniciar_busca_apos_criacao_ativo, sender=Ativo)
+
         # Cria um usuário para os testes
         self.usuario = Usuario.objects.create_user(username='testuser', password='testpass')
+
+        # Cria uma configuração de corretora
+        self.corretora_config = CorretoraConfig.objects.create(
+            nome="Bybit",
+            url_base="https://api.bybit.com",
+            exige_passphrase=False
+        )
+
+        # Cria um tipo de operação
+        self.tipo_operacao = TipoOperacao.objects.create(tipo='spot')
+
+        # Cria uma associação de corretora com o usuário
+        self.corretora_usuario = CorretoraUsuario.objects.create(
+            corretora=self.corretora_config,
+            api_key="fake_api_key",
+            api_secret="fake_api_secret",
+            usuario=self.usuario
+        )
+        self.corretora_usuario.tipos.add(self.tipo_operacao)
 
         # Cria uma moeda para associar ao ativo
         self.moeda = Moeda.objects.create(
@@ -15,7 +40,8 @@ class AtivoModelTests(TestCase):
             token="BTC",
             cor="#F7931A",
             logo=None,
-            usuario=self.usuario
+            usuario=self.usuario,
+            corretora=self.corretora_usuario  # Associando a corretora ao campo GenericForeignKey
         )
 
         # Cria um ativo inicial para os testes

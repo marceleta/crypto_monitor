@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import os
+from datetime import datetime, timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,7 +47,8 @@ INSTALLED_APPS = [
     'usuario',
     'ativo',
     'patrimonio',
-    'corretora'
+    'corretora',
+    'integracao'
 ]
 
 REST_FRAMEWORK = {
@@ -89,6 +91,15 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'crypto_monitor.wsgi.application'
+
+now = datetime.now()
+end_of_day = datetime(now.year, now.month, now.day, 23, 59, 59)
+time_remaining = end_of_day - now
+
+SIMPLE_JWT = {
+    'ACESS_TOKEN_LIFETIME': time_remaining,
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7)
+}
 
 
 # Database
@@ -153,3 +164,15 @@ AUTH_USER_MODEL = 'usuario.Usuario'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+
+# Configurações do Celery
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+
+# Configurações para testes
+CELERY_TASK_ALWAYS_EAGER = True  # Executa as tarefas de forma síncrona durante os testes
+CELERY_TASK_EAGER_PROPAGATES = True
+

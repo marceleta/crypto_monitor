@@ -48,7 +48,7 @@ class DashboardViewSet(viewsets.ModelViewSet):
             cotacao_atual = HistoricoCotacao.objects.filter(moeda=moeda).order_by('-data').first()
 
             if cotacao_atual:
-                valor_atual = cotacao_atual.preco
+                valor_atual = cotacao_atual.fechamento
                 quantidade_total = dados['quantidade_total']
                 valor_total = valor_atual * quantidade_total
                 valor_total_carteira += valor_total
@@ -120,7 +120,7 @@ class AtivoDetalheViewSet(viewsets.ViewSet):
                 historico_agrupado = historico_cotacoes.annotate(
                     periodo=TruncWeek('data')
                 ).values('periodo').annotate(
-                    preco_medio=Avg('preco')
+                    preco_medio=Avg('fechamento')
                 ).order_by('periodo')
 
             elif agrupamento == 'quinzenal':
@@ -133,14 +133,14 @@ class AtivoDetalheViewSet(viewsets.ViewSet):
                     ),
                     mes=TruncMonth('data')
                 ).values('mes', 'quinzena').annotate(
-                    preco_medio=Avg('preco')
+                    preco_medio=Avg('fechamento')
                 ).order_by('mes', 'quinzena')
 
             else:  # Agrupamento mensal
                 historico_agrupado = historico_cotacoes.annotate(
                     periodo=TruncMonth('data')
                 ).values('periodo').annotate(
-                    preco_medio=Avg('preco')
+                    preco_medio=Avg('fechamento')
                 ).order_by('periodo')
 
             # Formatar a resposta
@@ -176,98 +176,83 @@ class PatrimonioEvolucaoViewSet(GenericViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = PatrimonioEvolucaoPagination
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='geral')
     def evolucao_patrimonio(self, request):
         user = request.user
 
-        moedas = Moeda.objects.filter(usuario=user)
-        #Verifica se o usuário possui moedas
-        if not moedas.exists():
-            return Response({'error':'O usuário não possui ativos'}, status=status.HTTP_404_NOT_FOUND)
-
+        # Consulta todos os ativos do usuário diretamente
+        ativos = Ativo.objects.filter(usuario=user)
+        if not ativos.exists():
+            return Response({'error': 'O usuário não possui ativos'}, status=status.HTTP_404_NOT_FOUND)
 
         patrimonio = {}
         soma_periodo = {}
 
-        for moeda in moedas:
-            ativos = Ativo.objects.filter(usuario=user, moeda=moeda)
-            # Se o usuário não possuir ativos, retornar um erro
-            if not ativos.exists():
-                return Response({"error": "O usuário não possui ativos"}, status=status.HTTP_404_NOT_FOUND)
+        for ativo in ativos:
+            moeda = ativo.moeda  # Obtém a moeda diretamente do ativo
 
-            patrimonio[moeda.nome] = {
-                'token': moeda.token,
-                'ativos': {}
-            }
+            # Adiciona moeda ao patrimônio, se ainda não existir
+            if moeda.nome not in patrimonio:
+                patrimonio[moeda.nome] = {'token': moeda.token, 'ativos': {}}
 
-            for ativo in ativos:
-                #print('Ativo: ' + str(ativo))
+            data_compra = ativo.data_compra
+            historio = HistoricoCotacao.objects.filter(data=data_compra, moeda=moeda).first()
+            valor_ativo = ativo.quantidade * historio.fechamento
+            patrimonio[moeda.nome]['ativos'][str(ativo)] = {'cotacoes': []}
 
-                data_compra = ativo.data_compra
-                historio = HistoricoCotacao.objects.filter(data=data_compra).first()
+            agrupamento = request.query_params.get('agrupamento', 'mensal')
 
-                valor_ativo = ativo.quantidade * historio.preco
-                #print('Valor_ativo: ' + str(valor_ativo))
+            if agrupamento == 'mensal':
+                data_inicio = data_compra.replace(day=1)
+                cotacoes = HistoricoCotacao.objects.filter(
+                    moeda=moeda, 
+                    data__gte=data_inicio
+                ).annotate(
+                    mes=TruncMonth('data')
+                ).values('mes').annotate(
+                    ultimo_dia=Max('data')
+                ).order_by('mes', 'ultimo_dia')
 
-                patrimonio[moeda.nome]['ativos'][str(ativo)] = {
-                    'cotacoes': []
-                }
-
-                # Definir o tipo de agrupamento (mensal por padrão ou anual)
-                agrupamento = request.query_params.get('agrupamento', 'mensal')
-
-                if agrupamento == 'mensal':
-                    cotacoes = HistoricoCotacao.objects.filter(moeda=moeda, data__gte=ativo.data_compra).annotate(
-                        mes=TruncMonth('data')  # Agrupa por mês
-                    ).values('mes').annotate(
-                        ultimo_dia=Max('data')  # Pega a última data de cada mês
-                    ).order_by('-mes', 'ultimo_dia')
-
-                elif agrupamento == 'anual':
-                    cotacoes = HistoricoCotacao.objects.filter(moeda=moeda, data__gte=ativo.data_compra).annotate(
-                        ano=TruncYear('data')  # Agrupa por ano
-                    ).values('ano').annotate(
-                        ultimo_dia=Max('data')  # Pega a última data de cada ano
-                    ).order_by('-ano', 'ultimo_dia')
-
-                else:
-                    return Response({"error": "Agrupamento inválido."}, status=400)
+                primeira_cotacao = HistoricoCotacao.objects.filter(data=data_compra, moeda=moeda).first()
 
                 for cotacao in cotacoes:
-                    if agrupamento == 'mensal':
-                        periodo = cotacao['mes'].strftime('%B %Y')
-                    elif agrupamento == 'anual':
-                        periodo = cotacao['ano'].strftime('%Y')
+                    periodo = cotacao['mes'].strftime('%B %Y')
+                    ultima_cotacao = HistoricoCotacao.objects.filter(moeda=moeda, data=cotacao['ultimo_dia']).first()
 
-                    cotacao_ultimo_dia = HistoricoCotacao.objects.filter(
-                        moeda=moeda, data=cotacao['ultimo_dia']).first()
-
-                    cotacao_no_periodo = ativo.quantidade * Decimal(cotacao_ultimo_dia.preco)
-                    cotacao_ativo = cotacao_no_periodo - valor_ativo
-
-                    patrimonio[moeda.nome]['ativos'][str(ativo)]['cotacoes'].append({
-                        'periodo': periodo,
-                        'evolucao_preco_ativo': cotacao_ativo
-                    })
-
-                    # Acumular a soma anual ou mensal
-                    if periodo in soma_periodo:
-                        soma_periodo[periodo] += cotacao_ativo
+                    if primeira_cotacao == ultima_cotacao:
+                        evolucao_mensal = primeira_cotacao.fechamento * ativo.quantidade
                     else:
-                        soma_periodo[periodo] = cotacao_ativo
+                        evolucao_mensal = (ultima_cotacao.fechamento - primeira_cotacao.fechamento) * ativo.quantidade
 
-            
-        soma_periodo_list = [ {'periodo': periodo, 'valor': str(valor)} for periodo, valor in soma_periodo.items()]
+                    soma_periodo[periodo] = soma_periodo.get(periodo, Decimal('0.00')) + evolucao_mensal
+
+            elif agrupamento == 'anual':
+                cotacoes = HistoricoCotacao.objects.filter(moeda=moeda, data__gte=data_compra).annotate(
+                    ano=TruncYear('data')
+                ).values('ano').annotate(
+                    ultimo_dia=Max('data')
+                ).order_by('-ano', 'ultimo_dia')
+
+                for cotacao in cotacoes:
+                    periodo = cotacao['ano'].strftime('%Y')
+                    primeira_cotacao = HistoricoCotacao.objects.filter(data=data_compra, moeda=moeda).first()
+                    ultima_cotacao = HistoricoCotacao.objects.filter(moeda=moeda, data__year=cotacao['ano'].year).order_by('-data').first()
+
+                    evolucao_anual = (ultima_cotacao.fechamento - primeira_cotacao.fechamento) * ativo.quantidade
+                    soma_periodo[periodo] = soma_periodo.get(periodo, Decimal('0.00')) + evolucao_anual
+
+            else:
+                return Response({"error": "Agrupamento inválido."}, status=400)
+
+        soma_periodo_list = list(reversed([{'periodo': periodo, 'valor': str(valor)} for periodo, valor in soma_periodo.items()]))
         paginated_response = self.paginate_queryset(soma_periodo_list)
-
-        if paginated_response is not None:
-            return self.get_paginated_response(paginated_response)
-
-        return Response({
-            'soma_periodo':soma_periodo_list
-        })
+        
+        return self.get_paginated_response(paginated_response)
+        
+                
 
 
+        
 
 
 
